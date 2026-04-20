@@ -11,6 +11,7 @@ OpenCode 插件，为 [OpenCode](https://opencode.ai) 注册自定义 LLM Provid
 - 灵活的 token 提取路径（支持嵌套 JSON，如 `data.accessToken`）
 - 自定义 header 注入格式（默认 `Authorization: Bearer <token>`）
 - 仅对目标 provider 的请求注入 token，不影响其他 provider
+- 兼容 OpenCode 的 `chat.headers` provider 类型 bug（`Provider` vs `ProviderContext`），可配置适配模式
 - 完全通过环境变量配置，无需修改代码
 
 ## 工作原理
@@ -42,7 +43,7 @@ OpenCode 插件，为 [OpenCode](https://opencode.ai) 注册自定义 LLM Provid
           │   ┌──────────────────────────────────┐
           │   │  chat.headers hook 被触发         │
           │   │                                    │
-          │   │  检查 provider.info.id === "nbcb"  │
+          │   │  getProviderId(provider) === "nbcb" │
           │   │       ↓ 匹配                       │
           │   │  output.headers["Authorization"]   │
           │   │    = "Bearer <current_token>"      │
@@ -106,6 +107,22 @@ OpenCode 会自动发现 `.opencode/plugin/` 目录下的 `.ts` 文件。
 |---------|------|--------|------|
 | `NBCB_HEADER_NAME` | 否 | `Authorization` | 注入 token 的 header 名称 |
 | `NBCB_HEADER_FORMAT` | 否 | `Bearer {token}` | header 值的格式模板，`{token}` 会被替换为实际 token |
+
+### 兼容性
+
+| 环境变量 | 必填 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `COMPAT_PROVIDER_ID_ACCESS` | 否 | `auto` | Provider ID 读取方式（见下方说明） |
+
+`COMPAT_PROVIDER_ID_ACCESS` 用于适配 OpenCode 的一个已知 bug：`chat.headers` hook 的 `input.provider` 实际类型是 `Provider`（`id` 在顶层）而非文档声明的 `ProviderContext`（`id` 在 `info` 内）。可选值：
+
+| 值 | 行为 | 适用场景 |
+|----|------|---------|
+| `auto` | 先尝试 `provider.info.id`，回退 `provider.id` | 通用，推荐保持默认 |
+| `direct` | 直接读取 `provider.id` | 当前 OpenCode 版本（存在 bug） |
+| `context` | 读取 `provider.info.id` | OpenCode 修复后的正确类型 |
+
+待 OpenCode 官方修复后，可切换为 `context` 或移除此配置。
 
 ## 使用示例
 

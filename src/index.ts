@@ -25,6 +25,10 @@
  *   NBCB_HEADER_NAME          - Header name for token (default: "Authorization")
  *   NBCB_HEADER_FORMAT        - Header value format, use {token} as placeholder
  *                                (default: "Bearer {token}")
+ *   COMPAT_PROVIDER_ID_ACCESS - How to read provider ID from chat.headers input:
+ *                                "auto"    - try info.id then id (default)
+ *                                "direct"  - use provider.id (current OpenCode bug)
+ *                                "context" - use provider.info.id (correct ProviderContext)
  *
  * ## Usage
  *
@@ -44,6 +48,23 @@ const PROVIDER_BASE_URL = process.env.NBCB_PROVIDER_BASE_URL ?? "";
 const PROVIDER_NPM = process.env.NBCB_PROVIDER_NPM ?? "@ai-sdk/openai-compatible";
 const HEADER_NAME = process.env.NBCB_HEADER_NAME ?? "Authorization";
 const HEADER_FORMAT = process.env.NBCB_HEADER_FORMAT ?? "Bearer {token}";
+
+// Compatibility: OpenCode bug causes input.provider to be Provider instead of ProviderContext
+// - Provider:        { id, name, ... }           → read .id directly
+// - ProviderContext: { info: { id, name, ... } }  → read .info.id
+const COMPAT_PROVIDER_ID_ACCESS =
+  (process.env.COMPAT_PROVIDER_ID_ACCESS as "auto" | "direct" | "context") ?? "auto";
+
+function getProviderId(provider: any): string | undefined {
+  if (COMPAT_PROVIDER_ID_ACCESS === "direct") {
+    return provider?.id;
+  }
+  if (COMPAT_PROVIDER_ID_ACCESS === "context") {
+    return provider?.info?.id;
+  }
+  // auto: try both
+  return provider?.info?.id ?? provider?.id;
+}
 
 function parseModels(): Record<
   string,
@@ -103,9 +124,7 @@ export const NBCBProviderPlugin: Plugin = async (_ctx) => {
       const token = tokenManager.getToken();
       if (!token) return;
 
-      // Check if this request targets our provider
-      // ProviderContext: { source, info: Provider { id, name, ... }, options }
-      if (input.provider?.info?.id === PROVIDER_ID) {
+      if (getProviderId(input.provider) === PROVIDER_ID) {
         output.headers[HEADER_NAME] = HEADER_FORMAT.replace("{token}", token);
       }
     },
