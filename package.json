@@ -18,6 +18,14 @@
   "peerDependencies": {
     "@opencode-ai/plugin": ">=0.1.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zchazc/nbcb-provider.git"
+  },
+  "homepage": "https://github.com/zchazc/nbcb-provider#readme",
+  "bugs": {
+    "url": "https://github.com/zchazc/nbcb-provider/issues"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.6.0"
