@@ -39,16 +39,22 @@ function getByPath(obj: unknown, path: string): string {
   return current;
 }
 
+type LogFn = (msg: string) => Promise<unknown>;
+type Logger = { info: LogFn; warn: LogFn; error: LogFn };
+
 export class TokenManager {
   private config: TokenManagerConfig | null = null;
   private token: string = "";
   private timer: ReturnType<typeof setInterval> | null = null;
   private fetching = false;
+  private log: Logger;
 
-  constructor() {
+  constructor(log: Logger) {
+    this.log = log;
+
     const url = process.env.NBCB_TOKEN_URL ?? "";
     if (!url) {
-      console.warn("[nbcb-provider] NBCB_TOKEN_URL not set, token refresh disabled");
+      this.log.warn("NBCB_TOKEN_URL not set, token refresh disabled");
       return;
     }
 
@@ -58,7 +64,7 @@ export class TokenManager {
       try {
         headers = JSON.parse(rawHeaders);
       } catch {
-        console.error("[nbcb-provider] NBCB_TOKEN_HEADERS is not valid JSON, ignoring");
+        this.log.error("NBCB_TOKEN_HEADERS is not valid JSON, ignoring");
       }
     }
 
@@ -109,9 +115,9 @@ export class TokenManager {
 
       const data = await response.json();
       this.token = getByPath(data, this.config.tokenPath);
-      console.log("[nbcb-provider] Token refreshed successfully");
+      this.log.info("Token refreshed successfully");
     } catch (err) {
-      console.error("[nbcb-provider] Failed to refresh token:", err);
+      this.log.error(`Failed to refresh token: ${err}`);
     } finally {
       this.fetching = false;
     }
@@ -126,13 +132,11 @@ export class TokenManager {
     const intervalMs = this.config.refreshIntervalSecs * 1000;
     this.timer = setInterval(() => {
       this.refreshToken().catch((err) => {
-        console.error("[nbcb-provider] Periodic token refresh error:", err);
+        this.log.error(`Periodic token refresh error: ${err}`);
       });
     }, intervalMs);
 
-    console.log(
-      `[nbcb-provider] Token refresh scheduled every ${this.config.refreshIntervalSecs}s`,
-    );
+    this.log.info(`Token refresh scheduled every ${this.config.refreshIntervalSecs}s`);
   }
 
   /** Stop periodic refresh */

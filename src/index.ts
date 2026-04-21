@@ -86,8 +86,14 @@ function parseModels(): Record<
   }
 }
 
-export const NBCBProviderPlugin: Plugin = async (_ctx) => {
-  const tokenManager = new TokenManager();
+export const NBCBProviderPlugin: Plugin = async ({ client }) => {
+  const log = {
+    info: (msg: string) => client.app.log({ body: { service: "nbcb-provider", level: "info", message: msg } }),
+    warn: (msg: string) => client.app.log({ body: { service: "nbcb-provider", level: "warn", message: msg } }),
+    error: (msg: string) => client.app.log({ body: { service: "nbcb-provider", level: "error", message: msg } }),
+  };
+
+  const tokenManager = new TokenManager(log);
 
   if (tokenManager.enabled) {
     await tokenManager.start();
@@ -97,9 +103,7 @@ export const NBCBProviderPlugin: Plugin = async (_ctx) => {
     // Register the custom provider via config hook
     config: async (config) => {
       if (!PROVIDER_BASE_URL) {
-        console.warn(
-          "[nbcb-provider] NBCB_PROVIDER_BASE_URL not set, skipping provider registration",
-        );
+        await log.warn("NBCB_PROVIDER_BASE_URL not set, skipping provider registration");
         return;
       }
 
@@ -114,9 +118,7 @@ export const NBCBProviderPlugin: Plugin = async (_ctx) => {
       };
       config.provider = providers;
 
-      console.log(
-        `[nbcb-provider] Registered provider "${PROVIDER_ID}" with base URL: ${PROVIDER_BASE_URL}`,
-      );
+      await log.info(`Registered provider "${PROVIDER_ID}" with base URL: ${PROVIDER_BASE_URL}`);
     },
 
     // Inject token into request headers for our provider
