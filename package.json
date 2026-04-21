@@ -1,6 +1,6 @@
 {
   "name": "@zchazc/nbcb-provider",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "OpenCode plugin that provides a custom LLM provider with periodic token refresh",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
