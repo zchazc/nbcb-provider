@@ -107,6 +107,7 @@ OpenCode 会自动发现 `.opencode/plugin/` 目录下的 `.ts` 文件。
 |---------|------|--------|------|
 | `NBCB_HEADER_NAME` | 否 | `Authorization` | 注入 token 的 header 名称 |
 | `NBCB_HEADER_FORMAT` | 否 | `Bearer {token}` | header 值的格式模板，`{token}` 会被替换为实际 token |
+| `NBCB_USER_AGENT` | 否 | — | 自定义 User-Agent，仅在目标 provider 的请求中生效，未设置时不修改原始值 |
 
 ### 兼容性
 

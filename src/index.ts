@@ -25,6 +25,7 @@
  *   NBCB_HEADER_NAME          - Header name for token (default: "Authorization")
  *   NBCB_HEADER_FORMAT        - Header value format, use {token} as placeholder
  *                                (default: "Bearer {token}")
+ *   NBCB_USER_AGENT           - Custom User-Agent for API requests (optional, not modified if unset)
  *   COMPAT_PROVIDER_ID_ACCESS - How to read provider ID from chat.headers input:
  *                                "auto"    - try info.id then id (default)
  *                                "direct"  - use provider.id (current OpenCode bug)
@@ -48,6 +49,7 @@ const PROVIDER_BASE_URL = process.env.NBCB_PROVIDER_BASE_URL ?? "";
 const PROVIDER_NPM = process.env.NBCB_PROVIDER_NPM ?? "@ai-sdk/openai-compatible";
 const HEADER_NAME = process.env.NBCB_HEADER_NAME ?? "Authorization";
 const HEADER_FORMAT = process.env.NBCB_HEADER_FORMAT ?? "Bearer {token}";
+const USER_AGENT = process.env.NBCB_USER_AGENT ?? "";
 
 // Compatibility: OpenCode bug causes input.provider to be Provider instead of ProviderContext
 // - Provider:        { id, name, ... }           → read .id directly
@@ -121,13 +123,17 @@ export const NBCBProviderPlugin: Plugin = async ({ client }) => {
       await log.info(`Registered provider "${PROVIDER_ID}" with base URL: ${PROVIDER_BASE_URL}`);
     },
 
-    // Inject token into request headers for our provider
+    // Inject token and custom headers into request headers for our provider
     "chat.headers": async (input, output) => {
-      const token = tokenManager.getToken();
-      if (!token) return;
+      if (getProviderId(input.provider) !== PROVIDER_ID) return;
 
-      if (getProviderId(input.provider) === PROVIDER_ID) {
+      const token = tokenManager.getToken();
+      if (token) {
         output.headers[HEADER_NAME] = HEADER_FORMAT.replace("{token}", token);
+      }
+
+      if (USER_AGENT) {
+        output.headers["User-Agent"] = USER_AGENT;
       }
     },
   };
