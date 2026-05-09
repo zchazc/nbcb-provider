@@ -6,7 +6,7 @@ name: Node.js Package
 on:
   push:
     tags:
-      - "V*.*.*"
+      - "v*.*.*"
 
 jobs:
   npm-publish:
@@ -25,4 +25,15 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm publish --access public
+      - name: Determine npm dist-tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#[vV]}"
+          if [[ "$VERSION" == *"-"* ]]; then
+            TAG_ID="${VERSION#*-}"
+            TAG_ID="${TAG_ID%%.*}"
+            echo "NPM_TAG=--tag ${TAG_ID}" >> "$GITHUB_ENV"
+          else
+            echo "NPM_TAG=" >> "$GITHUB_ENV"
+          fi
+      - run: npm publish --access public ${NPM_TAG}
+        name: Publish
