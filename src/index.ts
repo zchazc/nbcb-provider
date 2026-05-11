@@ -26,6 +26,8 @@
  *   NBCB_HEADER_FORMAT        - Header value format, use {token} as placeholder
  *                                (default: "Bearer {token}")
  *   NBCB_USER_AGENT           - Custom User-Agent for API requests (optional, not modified if unset)
+ *   NBCB_BODY_REPLACES        - JSON map of word replacements for system message content
+ *                                e.g. '{"oldWord":"newWord","foo":"bar"}'
  *   COMPAT_PROVIDER_ID_ACCESS - How to read provider ID from chat.headers input:
  *                                "auto"    - try info.id then id (default)
  *                                "direct"  - use provider.id (current OpenCode bug)
@@ -50,6 +52,22 @@ const PROVIDER_NPM = process.env.NBCB_PROVIDER_NPM ?? "@ai-sdk/openai-compatible
 const HEADER_NAME = process.env.NBCB_HEADER_NAME ?? "Authorization";
 const HEADER_FORMAT = process.env.NBCB_HEADER_FORMAT ?? "Bearer {token}";
 const USER_AGENT = process.env.NBCB_USER_AGENT ?? "";
+
+function parseReplaces(): Record<string, string> | null {
+  const raw = process.env.NBCB_BODY_REPLACES;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed as Record<string, string>;
+    }
+    return null;
+  } catch {
+    console.error("[nbcb-provider] Failed to parse NBCB_BODY_REPLACES, ignoring");
+    return null;
+  }
+}
+const BODY_REPLACES = parseReplaces();
 
 // Compatibility: OpenCode bug causes input.provider to be Provider instead of ProviderContext
 // - Provider:        { id, name, ... }           → read .id directly
@@ -151,7 +169,37 @@ export const NBCBProviderPlugin: Plugin = async ({ client }) => {
             if (USER_AGENT) {
               headers.set("User-Agent", USER_AGENT);
             }
-            return fetch(input, { ...init, headers });
+
+            let body = init?.body;
+            if (BODY_REPLACES) {
+              if (typeof body !== "string") {
+                log.warn(`NBCB_BODY_REPLACES set but body is ${body == null ? "null" : typeof body}, skipping system message replacement`);
+              } else {
+                try {
+                  const parsed = JSON.parse(body);
+                  if (parsed?.messages && Array.isArray(parsed.messages)) {
+                    let modified = false;
+                    for (const msg of parsed.messages) {
+                      if (msg.role === "system" && typeof msg.content === "string") {
+                        for (const [from, to] of Object.entries(BODY_REPLACES)) {
+                          if (msg.content.includes(from)) {
+                            msg.content = msg.content.replaceAll(from, to);
+                            modified = true;
+                          }
+                        }
+                      }
+                    }
+                    if (modified) {
+                      body = JSON.stringify(parsed);
+                    }
+                  }
+                } catch {
+                  // body is not JSON, skip
+                }
+              }
+            }
+
+            return fetch(input, { ...init, headers, body });
           },
         };
       },
