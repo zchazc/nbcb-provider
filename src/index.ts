@@ -132,9 +132,29 @@ export const NBCBProviderPlugin: Plugin = async ({ client }) => {
         output.headers[HEADER_NAME] = HEADER_FORMAT.replace("{token}", token);
       }
 
-      if (USER_AGENT) {
-        output.headers["User-Agent"] = USER_AGENT;
-      }
+      // User-Agent 由 auth.loader 注入的 fetch 控制，此处不再设置
+    },
+
+    // 通过 auth.loader 注入自定义 fetch，在 AI SDK 拼完 headers 后最终覆盖 User-Agent
+    auth: {
+      provider: PROVIDER_ID,
+      methods: [
+        {
+          type: "api" as const,
+          label: "API Key",
+        },
+      ],
+      loader: async () => {
+        return {
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const headers = new Headers(init?.headers);
+            if (USER_AGENT) {
+              headers.set("User-Agent", USER_AGENT);
+            }
+            return fetch(input, { ...init, headers });
+          },
+        };
+      },
     },
   };
 };
