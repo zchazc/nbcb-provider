@@ -28,6 +28,8 @@
  *   NBCB_USER_AGENT           - Custom User-Agent for API requests (optional, not modified if unset)
  *   NBCB_BODY_REPLACES        - JSON map of word replacements for system message content
  *                                e.g. '{"oldWord":"newWord","foo":"bar"}'
+ *   NBCB_BODY_SET             - JSON object deep-merged into request body
+ *                                e.g. '{"a":{"b":"c"}}' sets body.a.b = "c"
  *   COMPAT_PROVIDER_ID_ACCESS - How to read provider ID from chat.headers input:
  *                                "auto"    - try info.id then id (default)
  *                                "direct"  - use provider.id (current OpenCode bug)
@@ -68,6 +70,35 @@ function parseReplaces(): Record<string, string> | null {
   }
 }
 const BODY_REPLACES = parseReplaces();
+
+function parseBodySet(): Record<string, unknown> | null {
+  const raw = process.env.NBCB_BODY_SET;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    console.error("[nbcb-provider] NBCB_BODY_SET must be a JSON object, ignoring");
+    return null;
+  } catch {
+    console.error("[nbcb-provider] Failed to parse NBCB_BODY_SET, ignoring");
+    return null;
+  }
+}
+const BODY_SET = parseBodySet();
+
+function deepMerge(target: unknown, source: unknown): unknown {
+  if (typeof source !== "object" || source === null || Array.isArray(source)) return source;
+  if (typeof target !== "object" || target === null || Array.isArray(target)) {
+    return deepMerge({}, source);
+  }
+  const result = { ...(target as Record<string, unknown>) };
+  for (const key of Object.keys(source as Record<string, unknown>)) {
+    result[key] = deepMerge(result[key], (source as Record<string, unknown>)[key]);
+  }
+  return result;
+}
 
 // Compatibility: OpenCode bug causes input.provider to be Provider instead of ProviderContext
 // - Provider:        { id, name, ... }           → read .id directly
@@ -171,31 +202,33 @@ export const NBCBProviderPlugin: Plugin = async ({ client }) => {
             }
 
             let body = init?.body;
-            if (BODY_REPLACES) {
-              if (typeof body !== "string") {
-                log.warn(`NBCB_BODY_REPLACES set but body is ${body == null ? "null" : typeof body}, skipping system message replacement`);
-              } else {
-                try {
-                  const parsed = JSON.parse(body);
-                  if (parsed?.messages && Array.isArray(parsed.messages)) {
-                    let modified = false;
-                    for (const msg of parsed.messages) {
-                      if (msg.role === "system" && typeof msg.content === "string") {
-                        for (const [from, to] of Object.entries(BODY_REPLACES)) {
-                          if (msg.content.includes(from)) {
-                            msg.content = msg.content.replaceAll(from, to);
-                            modified = true;
-                          }
+            if ((BODY_REPLACES || BODY_SET) && typeof body !== "string") {
+              log.warn(`Body modification enabled but body is ${body == null ? "null" : typeof body}, skipping`);
+            } else if (BODY_REPLACES || BODY_SET) {
+              try {
+                const parsed = JSON.parse(body as string);
+                let modified = false;
+
+                if (BODY_REPLACES && parsed?.messages && Array.isArray(parsed.messages)) {
+                  for (const msg of parsed.messages) {
+                    if (msg.role === "system" && typeof msg.content === "string") {
+                      for (const [from, to] of Object.entries(BODY_REPLACES)) {
+                        if (msg.content.includes(from)) {
+                          msg.content = msg.content.replaceAll(from, to);
+                          modified = true;
                         }
                       }
                     }
-                    if (modified) {
-                      body = JSON.stringify(parsed);
-                    }
                   }
-                } catch {
-                  // body is not JSON, skip
                 }
+
+                if (BODY_SET) {
+                  body = JSON.stringify(deepMerge(parsed, BODY_SET));
+                } else if (modified) {
+                  body = JSON.stringify(parsed);
+                }
+              } catch {
+                // body is not JSON, skip
               }
             }
 
